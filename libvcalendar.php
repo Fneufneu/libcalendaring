@@ -410,7 +410,7 @@ class libvcalendar implements Iterator
         }
 
         // map other attributes to internal fields
-        foreach ($ve->children as $prop) {
+        foreach ($ve->children() as $prop) {
             if (!($prop instanceof VObject\Property))
                 continue;
 
@@ -610,7 +610,7 @@ class libvcalendar implements Iterator
             $trigger = null;
             $alarm   = array();
 
-            foreach ($valarm->children as $prop) {
+            foreach ($valarm->children() as $prop) {
                 switch ($prop->name) {
                 case 'TRIGGER':
                     foreach ($prop->parameters as $param) {
@@ -704,7 +704,7 @@ class libvcalendar implements Iterator
         $this->freebusy = array('_type' => 'freebusy', 'periods' => array());
         $seen = array();
 
-        foreach ($ve->children as $prop) {
+        foreach ($ve->children() as $prop) {
             if (!($prop instanceof VObject\Property))
                 continue;
 
