@@ -423,18 +423,18 @@ class libvcalendar implements Iterator
                 break;
 
             case 'TRANSP':
-                $event['free_busy'] = $prop->value == 'TRANSPARENT' ? 'free' : 'busy';
+                $event['free_busy'] = $prop->getValue() == 'TRANSPARENT' ? 'free' : 'busy';
                 break;
 
             case 'STATUS':
-                if ($prop->value == 'TENTATIVE')
+                if ($prop->getValue() == 'TENTATIVE')
                     $event['free_busy'] = 'tentative';
-                else if ($prop->value == 'CANCELLED')
+                else if ($prop->getValue() == 'CANCELLED')
                     $event['cancelled'] = true;
-                else if ($prop->value == 'COMPLETED')
+                else if ($prop->getValue() == 'COMPLETED')
                     $event['complete'] = 100;
 
-                $event['status'] = strval($prop->value);
+                $event['status'] = strval($prop->getValue());
                 break;
 
             case 'COMPLETED':
@@ -445,14 +445,14 @@ class libvcalendar implements Iterator
                 break;
 
             case 'PRIORITY':
-                if (is_numeric($prop->value))
-                    $event['priority'] = $prop->value;
+                if (is_numeric($prop->getValue()))
+                    $event['priority'] = $prop->getValue();
                 break;
 
             case 'RRULE':
                 $params = is_array($event['recurrence']) ? $event['recurrence'] : array();
                 // parse recurrence rule attributes
-                foreach (explode(';', $prop->value) as $par) {
+                foreach (explode(';', $prop->getValue()) as $par) {
                     list($k, $v) = explode('=', $par);
                     $params[$k] = $v;
                 }
@@ -465,12 +465,12 @@ class libvcalendar implements Iterator
                 break;
 
             case 'EXDATE':
-                if (!empty($prop->value))
+                if (!empty($prop->getValue()))
                     $event['recurrence']['EXDATE'] = array_merge((array)$event['recurrence']['EXDATE'], self::convert_datetime($prop, true));
                 break;
 
             case 'RDATE':
-                if (!empty($prop->value))
+                if (!empty($prop->getValue()))
                     $event['recurrence']['RDATE'] = array_merge((array)$event['recurrence']['RDATE'], self::convert_datetime($prop, true));
                 break;
 
@@ -484,16 +484,16 @@ class libvcalendar implements Iterator
             case 'RELATED-TO':
                 $reltype = $prop->offsetGet('RELTYPE');
                 if ($reltype == 'PARENT' || $reltype === null) {
-                    $event['parent_id'] = $prop->value;
+                    $event['parent_id'] = $prop->getValue();
                 }
                 break;
 
             case 'SEQUENCE':
-                $event['sequence'] = intval($prop->value);
+                $event['sequence'] = intval($prop->getValue());
                 break;
 
             case 'PERCENT-COMPLETE':
-                $event['complete'] = intval($prop->value);
+                $event['complete'] = intval($prop->getValue());
                 break;
 
             case 'LOCATION':
@@ -510,14 +510,14 @@ class libvcalendar implements Iterator
 
             case 'CLASS':
             case 'X-CALENDARSERVER-ACCESS':
-                $event['sensitivity'] = strtolower($prop->value);
+                $event['sensitivity'] = strtolower($prop->getValue());
                 break;
 
             case 'X-MICROSOFT-CDO-BUSYSTATUS':
-                if ($prop->value == 'OOF')
+                if ($prop->getValue() == 'OOF')
                     $event['free_busy'] = 'outofoffice';
-                else if (in_array($prop->value, array('FREE', 'BUSY', 'TENTATIVE')))
-                    $event['free_busy'] = strtolower($prop->value);
+                else if (in_array($prop->getValue(), array('FREE', 'BUSY', 'TENTATIVE')))
+                    $event['free_busy'] = strtolower($prop->getValue());
                 break;
 
             case 'ATTENDEE':
@@ -525,12 +525,12 @@ class libvcalendar implements Iterator
                 $params = array('rsvp' => false);
                 foreach ($prop->parameters as $param) {
                     switch ($param->name) {
-                        case 'RSVP': $params[$param->name] = strtolower($param->value) == 'true'; break;
-                        default:     $params[$param->name] = $param->value; break;
+                        case 'RSVP': $params[$param->name] = strtolower($param->getValue()) == 'true'; break;
+                        default:     $params[$param->name] = $param->getValue(); break;
                     }
                 }
                 $attendee = self::map_keys($params, array_flip($this->attendee_keymap));
-                $attendee['email'] = preg_replace('/^mailto:/i', '', $prop->value);
+                $attendee['email'] = preg_replace('/^mailto:/i', '', $prop->getValue());
 
                 if ($prop->name == 'ORGANIZER') {
                     $attendee['role'] = 'ORGANIZER';
@@ -544,12 +544,12 @@ class libvcalendar implements Iterator
 
             case 'ATTACH':
                 $params = self::parameters_array($prop);
-                if (substr($prop->value, 0, 4) == 'http' && !strpos($prop->value, ':attachment:')) {
-                    $event['links'][] = $prop->value;
+                if (substr($prop->getValue(), 0, 4) == 'http' && !strpos($prop->getValue(), ':attachment:')) {
+                    $event['links'][] = $prop->getValue();
                 }
-                else if (strlen($prop->value) && strtoupper($params['VALUE']) == 'BINARY') {
+                else if (strlen($prop->getValue()) && strtoupper($params['VALUE']) == 'BINARY') {
                     $attachment = self::map_keys($params, array('FMTTYPE' => 'mimetype', 'X-LABEL' => 'name'));
-                    $attachment['data'] = base64_decode($prop->value);
+                    $attachment['data'] = base64_decode($prop->getValue());
                     $attachment['size'] = strlen($attachment['data']);
                     $event['attachments'][] = $attachment;
                 }
@@ -557,7 +557,7 @@ class libvcalendar implements Iterator
 
             default:
                 if (substr($prop->name, 0, 2) == 'X-')
-                    $event['x-custom'][] = array($prop->name, strval($prop->value));
+                    $event['x-custom'][] = array($prop->name, strval($prop->getValue()));
                 break;
             }
         }
@@ -614,20 +614,20 @@ class libvcalendar implements Iterator
                 switch ($prop->name) {
                 case 'TRIGGER':
                     foreach ($prop->parameters as $param) {
-                        if ($param->name == 'VALUE' && $param->value == 'DATE-TIME') {
+                        if ($param->name == 'VALUE' && $param->getValue() == 'DATE-TIME') {
                             $trigger = '@' . $prop->getDateTime()->format('U');
                             $alarm['trigger'] = $prop->getDateTime();
                         }
                         else if ($param->name == 'RELATED') {
-                            $alarm['related'] = $param->value;
+                            $alarm['related'] = $param->getValue();
                         }
                     }
-                    if (!$trigger && ($values = libcalendaring::parse_alarm_value($prop->value))) {
+                    if (!$trigger && ($values = libcalendaring::parse_alarm_value($prop->getValue()))) {
                         $trigger = $values[2];
                     }
 
                     if (!$alarm['trigger']) {
-                        $alarm['trigger'] = rtrim(preg_replace('/([A-Z])0[WDHMS]/', '\\1', $prop->value), 'T');
+                        $alarm['trigger'] = rtrim(preg_replace('/([A-Z])0[WDHMS]/', '\\1', $prop->getValue()), 'T');
                         // if all 0-values have been stripped, assume 'at time'
                         if ($alarm['trigger'] == 'P')
                             $alarm['trigger'] = 'PT0S';
@@ -635,7 +635,7 @@ class libvcalendar implements Iterator
                     break;
 
                 case 'ACTION':
-                    $action = $alarm['action'] = strtoupper($prop->value);
+                    $action = $alarm['action'] = strtoupper($prop->getValue());
                     break;
 
                 case 'SUMMARY':
@@ -645,18 +645,18 @@ class libvcalendar implements Iterator
                     break;
 
                 case 'REPEAT':
-                    $alarm['repeat'] = intval($prop->value);
+                    $alarm['repeat'] = intval($prop->getValue());
                     break;
 
                 case 'ATTENDEE':
-                    $alarm['attendees'][] = preg_replace('/^mailto:/i', '', $prop->value);
+                    $alarm['attendees'][] = preg_replace('/^mailto:/i', '', $prop->getValue());
                     break;
 
                 case 'ATTACH':
                     $params = self::parameters_array($prop);
-                    if (strlen($prop->value) && (preg_match('/^[a-z]+:/', $prop->value) || strtoupper($params['VALUE']) == 'URI')) {
+                    if (strlen($prop->getValue()) && (preg_match('/^[a-z]+:/', $prop->getValue()) || strtoupper($params['VALUE']) == 'URI')) {
                         // we only support URI-type of attachments here
-                        $alarm['uri'] = $prop->value;
+                        $alarm['uri'] = $prop->getValue();
                     }
                     break;
                 }
@@ -719,16 +719,16 @@ class libvcalendar implements Iterator
                 break;
 
             case 'ORGANIZER':
-                $this->freebusy['organizer'] = preg_replace('/^mailto:/i', '', $prop->value);
+                $this->freebusy['organizer'] = preg_replace('/^mailto:/i', '', $prop->getValue());
                 break;
 
             case 'FREEBUSY':
                 // The freebusy component can hold more than 1 value, separated by commas.
-                $periods = explode(',', $prop->value);
+                $periods = explode(',', $prop->getValue());
                 $fbtype = strval($prop['FBTYPE']) ?: 'BUSY';
 
                 // skip dupes
-                if ($seen[$prop->value.':'.$fbtype]++)
+                if ($seen[$prop->getValue().':'.$fbtype]++)
                     continue;
 
                 foreach ($periods as $period) {
@@ -751,7 +751,7 @@ class libvcalendar implements Iterator
                 break;
 
             case 'COMMENT':
-                $this->freebusy['comment'] = $prop->value;
+                $this->freebusy['comment'] = $prop->getValue();
             }
         }
 
@@ -763,7 +763,7 @@ class libvcalendar implements Iterator
      */
     public static function convert_string($prop)
     {
-        return str_replace('\,', ',', strval($prop->value));
+        return str_replace('\,', ',', strval($prop->getValue()));
     }
 
     /**
@@ -790,7 +790,7 @@ class libvcalendar implements Iterator
         }
         else if ($prop instanceof VObject\Property && ($prop['VALUE'] == 'DATE' || $prop['VALUE'] == 'DATE-TIME')) {
             try {
-                list($type, $dt) = VObject\Property\DateTime::parseData($prop->value, $prop);
+                list($type, $dt) = VObject\Property\DateTime::parseData($prop->getValue(), $prop);
                 $dt->_dateonly = ($type & VObject\Property\DateTime::DATE);
             }
             catch (Exception $e) {
@@ -799,7 +799,7 @@ class libvcalendar implements Iterator
         }
         else if ($prop instanceof VObject\Property && $prop['VALUE'] == 'PERIOD') {
             $dt = array();
-            foreach(explode(',', $prop->value) as $val) {
+            foreach(explode(',', $prop->getValue()) as $val) {
                 try {
                     list($start, $end) = explode('/', $val);
                     list($type, $item) = VObject\Property\DateTime::parseData($start, $prop);
@@ -873,7 +873,7 @@ class libvcalendar implements Iterator
     {
         $params = array();
         foreach ($prop->parameters as $param) {
-            $params[strtoupper($param->name)] = $param->value;
+            $params[strtoupper($param->name)] = $param->getValue();
         }
         return $params;
     }
@@ -1361,7 +1361,7 @@ class vobject_location_property extends VObject\Property
             '\n',
             '\,',
         );
-        $str.=':' . str_replace($src, $out, $this->value);
+        $str.=':' . str_replace($src, $out, $this->getValue());
 
         $out = '';
         while (strlen($str) > 0) {
