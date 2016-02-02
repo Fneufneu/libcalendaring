@@ -782,11 +782,9 @@ class libvcalendar implements Iterator
                 $dt[] = $item;
             }
         }
-        else if ($prop instanceof VObject\Property\DateTime) {
-            $dt = $prop->getDateTime();
-            if ($prop->getDateType() & VObject\Property\DateTime::DATE) {
-                $dt->_dateonly = true;
-            }
+        else if ($prop instanceof VObject\Property\ICalendar\DateTime) {
+            //$dt = $prop->getDateTime();
+            $dt = new DateTime($prop->getValue());
         }
         else if ($prop instanceof VObject\Property && ($prop['VALUE'] == 'DATE' || $prop['VALUE'] == 'DATE-TIME')) {
             $dt = new DateTime($prop->getValue());
