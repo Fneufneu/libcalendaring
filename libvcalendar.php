@@ -1330,7 +1330,7 @@ class libvcalendar implements Iterator
  * Override Sabre\VObject\Property that quotes commas in the location property
  * because Apple clients treat that property as list.
  */
-class vobject_location_property extends VObject\Property
+abstract class vobject_location_property extends VObject\Property
 {
     /**
      * Turns the object back into a serialized blob.
