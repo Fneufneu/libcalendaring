@@ -789,13 +789,7 @@ class libvcalendar implements Iterator
             }
         }
         else if ($prop instanceof VObject\Property && ($prop['VALUE'] == 'DATE' || $prop['VALUE'] == 'DATE-TIME')) {
-            try {
-                list($type, $dt) = VObject\Property\DateTime::parseData($prop->getValue(), $prop);
-                $dt->_dateonly = ($type & VObject\Property\DateTime::DATE);
-            }
-            catch (Exception $e) {
-                // ignore date parse errors
-            }
+            $dt = new DateTime($prop->getValue());
         }
         else if ($prop instanceof VObject\Property && $prop['VALUE'] == 'PERIOD') {
             $dt = array();
