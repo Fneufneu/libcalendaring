@@ -25,15 +25,15 @@ use \Sabre\VObject;
 
 // load Sabre\VObject classes
 if (!class_exists('\Sabre\VObject\Reader')) {
-    require_once __DIR__ . '/lib/Sabre/VObject/includes.php';
+    require_once __DIR__ . '/vendor/autoload.php';
 }
 
 /**
  * Class to parse and build vCalendar (iCalendar) files
  *
- * Uses the SabreTooth VObject library, version 2.1.
+ * Uses the SabreTooth VObject library, version 4.0.
  *
- * Download from https://github.com/fruux/sabre-vobject/archive/2.1.0.zip
+ * Download from https://github.com/fruux/sabre-vobject
  * and place the lib files in this plugin's lib directory
  *
  */
@@ -372,16 +372,6 @@ class libvcalendar implements Iterator
     }
 
     /**
-     * Helper method to determine whether the connected client is an Apple device
-     */
-    private function is_apple()
-    {
-        return stripos($this->agent, 'Apple') !== false
-            || stripos($this->agent, 'Mac OS X') !== false
-            || stripos($this->agent, 'iOS/') !== false;
-    }
-
-    /**
      * Convert the given VEvent object to a libkolab compatible array representation
      *
      * @param object Vevent object to convert
@@ -419,7 +409,7 @@ class libvcalendar implements Iterator
             case 'DTEND':
             case 'DUE':
                 $propmap = array('DTSTART' => 'start', 'DTEND' => 'end', 'DUE' => 'due');
-                $event[$propmap[$prop->name]] =  self::convert_datetime($prop);
+                $event[$propmap[$prop->name]] = self::convert_datetime($prop);
                 break;
 
             case 'TRANSP':
@@ -817,35 +807,6 @@ class libvcalendar implements Iterator
 
 
     /**
-     * Create a Sabre\VObject\Property instance from a PHP DateTime object
-     *
-     * @param string Property name
-     * @param object DateTime
-     */
-    public function datetime_prop($name, $dt, $utc = false, $dateonly = null)
-    {
-        $is_utc = $utc || (($tz = $dt->getTimezone()) && in_array($tz->getName(), array('UTC','GMT','Z')));
-        $is_dateonly = $dateonly === null ? (bool)$dt->_dateonly : (bool)$dateonly;
-        $vdt = new VObject\Property\DateTime($name);
-        $vdt->setDateTime($dt, $is_dateonly ? VObject\Property\DateTime::DATE :
-            ($is_utc ? VObject\Property\DateTime::UTC : VObject\Property\DateTime::LOCALTZ));
-
-        // register timezone for VTIMEZONE block
-        if (!$is_utc && !$dateonly && $tz && ($tzname = $tz->getName())) {
-            $ts = $dt->format('U');
-            if (is_array($this->vtimezones[$tzname])) {
-                $this->vtimezones[$tzname][0] = min($this->vtimezones[$tzname][0], $ts);
-                $this->vtimezones[$tzname][1] = max($this->vtimezones[$tzname][1], $ts);
-            }
-            else {
-                $this->vtimezones[$tzname] = array($ts, $ts);
-            }
-        }
-
-        return $vdt;
-    }
-
-    /**
      * Copy values from one hash array to another using a key-map
      */
     public static function map_keys($values, $map)
@@ -886,10 +847,10 @@ class libvcalendar implements Iterator
         $this->method = $method;
 
         // encapsulate in VCALENDAR container
-        $vcal = VObject\Component::create('VCALENDAR');
-        $vcal->version = '2.0';
-        $vcal->prodid = $this->prodid;
-        $vcal->calscale = 'GREGORIAN';
+        $vcal = new VObject\Component\VCalendar();
+        $vcal->VERSION = '2.0';
+        $vcal->PRODID = $this->prodid;
+        $vcal->CALSCALE = 'GREGORIAN';
 
         if (!empty($method)) {
             $vcal->METHOD = $method;
@@ -941,33 +902,40 @@ class libvcalendar implements Iterator
     private function _to_ical($event, $vcal, $get_attachment, $recurrence_id = null)
     {
         $type = $event['_type'] ?: 'event';
-        $ve = VObject\Component::create($this->type_component_map[$type]);
+        $vcal_creator = new VObject\Component\VCalendar();
+        $ve = $vcal_creator->createComponent($this->type_component_map[$type]);
         $ve->add('UID', $event['uid']);
 
         // set DTSTAMP according to RFC 5545, 3.8.7.2.
         $dtstamp = !empty($event['changed']) && !empty($this->method) ? $event['changed'] : new DateTime();
-        $ve->add($this->datetime_prop('DTSTAMP', $dtstamp, true));
+        $ve->add('DTSTAMP', $dtstamp);
 
-        // all-day events end the next day
-        if ($event['allday'] && !empty($event['end'])) {
-            $event['end'] = clone $event['end'];
-            $event['end']->add(new \DateInterval('P1D'));
-            $event['end']->_dateonly = true;
-        }
+        if ($event['allday'])
+            $ve->DTSTAMP['VALUE'] = 'DATE';
+
         if (!empty($event['created']))
-            $ve->add($this->datetime_prop('CREATED', $event['created'], true));
+            $ve->add('CREATED', $event['created']);
         if (!empty($event['changed']))
-            $ve->add($this->datetime_prop('LAST-MODIFIED', $event['changed'], true));
+            $ve->add('LAST-MODIFIED', $event['changed']);
         if (!empty($event['start']))
-            $ve->add($this->datetime_prop('DTSTART', $event['start'], false, (bool)$event['allday']));
+            $ve->add('DTSTART', $event['start']);
+        if ($event['allday'])
+            $ve->DTSTART['VALUE'] = 'DATE';
         if (!empty($event['end']))
-            $ve->add($this->datetime_prop('DTEND',   $event['end'], false, (bool)$event['allday']));
+            $ve->add('DTEND', $event['end']);
+        if ($event['allday'])
+            $ve->DTEND['VALUE'] = 'DATE';
         if (!empty($event['due']))
-            $ve->add($this->datetime_prop('DUE',   $event['due'], false));
+            $ve->add('DUE', $event['due']);
 
         // we're exporting a recurrence instance only
-        if (!$recurrence_id && $event['recurrence_date'] && $event['recurrence_date'] instanceof DateTime) {
-            $recurrence_id = $this->datetime_prop('RECURRENCE-ID', $event['recurrence_date'], false, (bool)$event['allday']);
+        if (!$recurrence_id
+        && $event['recurrence_date']
+        && $event['recurrence_date'] instanceof DateTime) {
+	    $recurrence_id = $vcal_creator->createProperty('RECURRENCE-ID');
+	    $recurrence_id->setDateTime($event['recurrence_date']);
+            if ($event['allday'])
+                $recurrence_id['VALUE'] = 'DATE';
             if ($event['thisandfuture'])
                 $recurrence_id->add('RANGE', 'THISANDFUTURE');
         }
@@ -978,7 +946,7 @@ class libvcalendar implements Iterator
         $ve->add('SUMMARY', $event['title']);
 
         if ($event['location'])
-            $ve->add($this->is_apple() ? new vobject_location_property('LOCATION', $event['location']) : new VObject\Property('LOCATION', $event['location']));
+            $ve->add('LOCATION', $event['location']);
         if ($event['description'])
             $ve->add('DESCRIPTION', strtr($event['description'], array("\r\n" => "\n", "\r" => "\n"))); // normalize line endings
 
@@ -1003,27 +971,17 @@ class libvcalendar implements Iterator
             // add EXDATEs each one per line (for Thunderbird Lightning)
             if (is_array($exdates)) {
                 foreach ($exdates as $ex) {
-                    if ($ex instanceof \DateTime) {
-                        $exd = clone $event['start'];
-                        $exd->setDate($ex->format('Y'), $ex->format('n'), $ex->format('j'));
-                        $exd->setTimeZone(new \DateTimeZone('UTC'));
-                        $ve->add(new VObject\Property('EXDATE', $exd->format('Ymd\\THis\\Z')));
-                    }
+                    $ve->add('EXDATE', $ex);
                 }
             }
             // add RDATEs
             if (is_array($rdates) && !empty($rdates)) {
-                $sample = $this->datetime_prop('RDATE', $rdates[0]);
-                $rdprop = new VObject\Property\MultiDateTime('RDATE', null);
-                $rdprop->setDateTimes($rdates, $sample->getDateType());
-                $ve->add($rdprop);
+                $ve->RDATE = $rdates;
             }
         }
 
         if ($event['categories']) {
-            $cat = VObject\Property::create('CATEGORIES');
-            $cat->setParts((array)$event['categories']);
-            $ve->add($cat);
+            $ve->add('CATEGORIES', (array)$event['categories']);
         }
 
         if (!empty($event['free_busy'])) {
@@ -1056,22 +1014,20 @@ class libvcalendar implements Iterator
 
         // Apple iCal and BusyCal required the COMPLETED date to be set in order to consider a task complete
         if ($event['status'] == 'COMPLETED' || $event['complete'] == 100) {
-            $ve->add($this->datetime_prop('COMPLETED', $event['changed'] ?: new DateTime('now - 1 hour'), true));
+            $ve->add('COMPLETED', $event['changed'] ?: new DateTime('now - 1 hour'), true);
         }
 
         if ($event['valarms']) {
             foreach ($event['valarms'] as $alarm) {
-                $va = VObject\Component::create('VALARM');
-                $va->action = $alarm['action'];
+		$va = $vcal_creator->createComponent('VALARM');
+                $va->ACTION = $alarm['action'];
                 if ($alarm['trigger'] instanceof DateTime) {
-                    $va->add($this->datetime_prop('TRIGGER', $alarm['trigger'], true));
+                    $va->add('TRIGGER', $alarm['trigger']);
                 }
                 else {
-                    $alarm_props = array();
-                    if (strtoupper($alarm['related']) == 'END') {
-                        $alarm_props['RELATED'] = 'END';
-                    }
-                    $va->add('TRIGGER', $alarm['trigger'], $alarm_props);
+                    $va->add('TRIGGER', $alarm['trigger']);
+                    if (strtoupper($alarm['related']) == 'END')
+                        $va->TRIGGER['RELATED'] = 'END';
                 }
 
                 if ($alarm['action'] == 'EMAIL') {
@@ -1097,13 +1053,13 @@ class libvcalendar implements Iterator
         }
         // legacy support
         else if ($event['alarms']) {
-            $va = VObject\Component::create('VALARM');
+            $va = $vcal_creator->createComponent('VALARM');
             list($trigger, $va->action) = explode(':', $event['alarms']);
             $val = libcalendaring::parse_alarm_value($trigger);
             if ($val[3])
                 $va->add('TRIGGER', $val[3]);
             else if ($val[0] instanceof DateTime)
-                $va->add($this->datetime_prop('TRIGGER', $val[0]));
+                $va->add('TRIGGER', $val[0]);
             $ve->add($va);
         }
 
@@ -1189,7 +1145,10 @@ class libvcalendar implements Iterator
         if (is_array($event['recurrence']) && $event['recurrence']['EXCEPTIONS']) {
             foreach ($event['recurrence']['EXCEPTIONS'] as $ex) {
                 $exdate = $ex['recurrence_date'] ?: $ex['start'];
-                $recurrence_id = $this->datetime_prop('RECURRENCE-ID', $exdate, false, (bool)$event['allday']);
+                $recurrence_id = $vcal_crator->createProperty('RECURRENCE-ID');
+	        $recurrence_id->setDateTime($exdate);
+                if ($event['allday'])
+                    $recurrence_id['VALUE'] = 'DATE';
                 if ($ex['thisandfuture'])
                     $recurrence_id->add('RANGE', 'THISANDFUTURE');
                 $this->_to_ical($ex, $vcal, $get_attachment, $recurrence_id);
@@ -1232,7 +1191,8 @@ class libvcalendar implements Iterator
         $year = 86400 * 360;
         $transitions = $tz->getTransitions($from - $year, $to + $year);
 
-        $vt = new VObject\Component('VTIMEZONE');
+        $vcal_creator = new VObject\Component\VCalendar();
+        $vt = $vcal_creator->createComponent('VTIMEZONE');
         $vt->TZID = $tz->getName();
 
         $std = null; $dst = null;
@@ -1246,12 +1206,12 @@ class libvcalendar implements Iterator
 
             if ($trans['isdst']) {
                 $t_dst = $trans['ts'];
-                $dst = new VObject\Component('DAYLIGHT');
+                $dst = $vcal_creator->createComponent('DAYLIGHT');
                 $cmp = $dst;
             }
             else {
                 $t_std = $trans['ts'];
-                $std = new VObject\Component('STANDARD');
+                $std = $vcal_creator->createComponent('STANDARD');
                 $cmp = $std;
             }
 
@@ -1323,50 +1283,3 @@ class libvcalendar implements Iterator
 
 }
 
-
-/**
- * Override Sabre\VObject\Property that quotes commas in the location property
- * because Apple clients treat that property as list.
- */
-abstract class vobject_location_property extends VObject\Property
-{
-    /**
-     * Turns the object back into a serialized blob.
-     *
-     * @return string
-     */
-    public function serialize()
-    {
-        $str = $this->name;
-
-        foreach ($this->parameters as $param) {
-            $str.=';' . $param->serialize();
-        }
-
-        $src = array(
-            '\\',
-            "\n",
-            ',',
-        );
-        $out = array(
-            '\\\\',
-            '\n',
-            '\,',
-        );
-        $str.=':' . str_replace($src, $out, $this->getValue());
-
-        $out = '';
-        while (strlen($str) > 0) {
-            if (strlen($str) > 75) {
-                $out.= mb_strcut($str, 0, 75, 'utf-8') . "\r\n";
-                $str = ' ' . mb_strcut($str, 75, strlen($str), 'utf-8');
-            } else {
-                $out.= $str . "\r\n";
-                $str = '';
-                break;
-            }
-        }
-
-        return $out;
-    }
-}
